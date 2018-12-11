@@ -78,9 +78,16 @@ static CK_TOKEN_INFO slot_0_token_info = {
 
 static CK_FUNCTION_LIST function_list;
 
+struct nerves_key_session {
+    CK_ULONG open_count;
+    CK_ULONG find_index;
+};
+
+static struct nerves_key_session session;
+
 // See https://www.cryptsoft.com/pkcs11doc/
 
-// https://www.cryptsoft.com/pkcs11doc/v220/pkcs11__all_8h.html#aC_GetFunctionList
+// https://www.cryptsoft.com/pkcs11doc/v220/pkcs11__all_8h.html
 
 /* General Purpose */
 
@@ -90,6 +97,9 @@ CK_DEFINE_FUNCTION(CK_RV, C_Initialize)(
 {
     DIN;
     (void) pInitArgs;
+
+    memset(&session, 0, sizeof(session));
+
     DOUT;
     return CKR_OK;
 }
@@ -204,8 +214,6 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetMechanismList)(
     CK_ULONG_PTR pulCount
 )
 {
-    CK_ULONG count;
-
     DIN;
 
     DOUT;
@@ -273,19 +281,26 @@ CK_DEFINE_FUNCTION(CK_RV, C_OpenSession)(
     CK_SESSION_HANDLE_PTR phSession
 )
 {
-    CK_RV          rv;
-    CK_ULONG       i;
-    CK_BYTE        cert_data[3072];  // Max cert value for ykpiv
-    CK_ULONG       cert_len = sizeof(cert_data);
+    DIN;
+    if (slotID != 0)
+        return CKR_SLOT_ID_INVALID;
+    if (phSession == NULL_PTR)
+      return CKR_ARGUMENTS_BAD;
+    if ((flags & CKF_SERIAL_SESSION) == 0)
+       return CKR_SESSION_PARALLEL_NOT_SUPPORTED;
 
-    DIN; // TODO: pApplication and Notify
+    if ((flags & CKF_RW_SESSION))
+        return CKR_TOKEN_WRITE_PROTECTED;
 
+    // Unused
+    (void) pApplication;
+    (void) Notify;
+
+    phSession = 0;
+    session.open_count++;
 
     DOUT;
     return CKR_OK;
-
-
-    return rv;
 }
 
 CK_DEFINE_FUNCTION(CK_RV, C_CloseSession)(
@@ -294,6 +309,10 @@ CK_DEFINE_FUNCTION(CK_RV, C_CloseSession)(
 {
     DIN;
 
+    if (hSession != 0 || session.open_count == 0)
+        return CKR_SLOT_ID_INVALID;
+
+    session.open_count--;
 
     DOUT;
     return CKR_OK;
@@ -303,13 +322,13 @@ CK_DEFINE_FUNCTION(CK_RV, C_CloseAllSessions)(
     CK_SLOT_ID slotID
 )
 {
-    CK_RV rv;
-
     DIN;
+    if (slotID != 0)
+        return CKR_SLOT_ID_INVALID;
 
-
+    session.open_count = 0;
     DOUT;
-    return rv;
+    return CKR_OK;
 }
 
 CK_DEFINE_FUNCTION(CK_RV, C_GetSessionInfo)(
@@ -318,8 +337,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetSessionInfo)(
 )
 {
     DIN;
-
-
+    DBG("TODO!!!");
     DOUT;
     return CKR_OK;
 }
@@ -431,9 +449,128 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetAttributeValue)(
 )
 {
     DIN;
-    DBG("TODO!!!");
+    if (hSession != 0 || session.open_count == 0)
+        return CKR_SESSION_HANDLE_INVALID;
+
+    if (pTemplate == NULL_PTR || ulCount == 0)
+      return CKR_ARGUMENTS_BAD;
+
+    CK_RV rv_final = CKR_OK;
+    for (CK_ULONG i = 0; i < ulCount; i++) {
+        CK_RV rv;
+
+        switch (pTemplate[i].type) {
+        case CKA_KEY_TYPE:
+            // Type of key.
+            if (pTemplate[i].pValue == NULL_PTR) {
+                pTemplate[i].ulValueLen = sizeof(CK_ULONG);
+                rv = CKR_OK;
+            } else if (pTemplate[i].ulValueLen >= sizeof(CK_ULONG)) {
+                pTemplate[i].ulValueLen = sizeof(CK_ULONG);
+                *((CK_ULONG *) pTemplate[i].pValue) = CKK_ECDSA;
+                rv = CKR_OK;
+            } else {
+                pTemplate[i].ulValueLen = (CK_ULONG) -1;
+                rv = CKR_BUFFER_TOO_SMALL;
+            }
+            break;
+
+        case CKA_LABEL:
+            // Description of the object (default empty).
+            if (pTemplate[i].pValue == NULL_PTR) {
+                pTemplate[i].ulValueLen = 3;
+                rv = CKR_OK;
+            } else if (pTemplate[i].ulValueLen >= 3) {
+                pTemplate[i].ulValueLen = 3;
+                strcpy((char *) pTemplate[i].pValue, "0");
+                rv = CKR_OK;
+            } else {
+                pTemplate[i].ulValueLen = (CK_ULONG) -1;
+                rv = CKR_BUFFER_TOO_SMALL;
+            }
+            break;
+
+        case CKA_ID:
+            // Key identifier for public/private key pair (default empty).
+            if (pTemplate[i].pValue == NULL_PTR) {
+                pTemplate[i].ulValueLen = 1;
+                rv = CKR_OK;
+            } else if (pTemplate[i].ulValueLen >= 1) {
+                pTemplate[i].ulValueLen = 1;
+                *((CK_BYTE *) pTemplate[i].pValue) = '0';
+                rv = CKR_OK;
+            } else {
+                pTemplate[i].ulValueLen = (CK_ULONG) -1;
+                rv = CKR_BUFFER_TOO_SMALL;
+            }
+            break;
+
+        case CKA_EC_PARAMS:
+            // DER-encoding of an ANSI X9.62 Parameters value.
+        {
+            static const CK_BYTE prime256v1[] = "\x06\x08\x2a\x86\x48\xce\x3d\x03\x01\x07";
+            if (pTemplate[i].pValue == NULL_PTR) {
+                pTemplate[i].ulValueLen = sizeof(prime256v1);
+                rv = CKR_OK;
+            } else if (pTemplate[i].ulValueLen >= sizeof(prime256v1)) {
+                pTemplate[i].ulValueLen = sizeof(prime256v1);
+                memcpy(pTemplate[i].pValue, prime256v1, sizeof(prime256v1));
+                rv = CKR_OK;
+            } else {
+                pTemplate[i].ulValueLen = (CK_ULONG) -1;
+                rv = CKR_BUFFER_TOO_SMALL;
+            }
+            break;
+        }
+        case CKA_EC_POINT:
+            // DER-encoding of ANSI X9.62 ECPoint value ''Q''.
+        {
+            // TODO: REPLACE WITH PUBLIC KEY
+            DBG("FIXME!!! CKA_EC_POINT is returning bogus data!!!")
+            static const CK_BYTE prime256v1[] = "\x06\x08\x2a\x86\x48\xce\x3d\x03\x01\x07";
+            if (pTemplate[i].pValue == NULL_PTR) {
+                pTemplate[i].ulValueLen = sizeof(prime256v1);
+                rv = CKR_OK;
+            } else if (pTemplate[i].ulValueLen >= sizeof(prime256v1)) {
+                pTemplate[i].ulValueLen = sizeof(prime256v1);
+                memcpy(pTemplate[i].pValue, prime256v1, sizeof(prime256v1));
+                rv = CKR_OK;
+            } else {
+                pTemplate[i].ulValueLen = (CK_ULONG) -1;
+                rv = CKR_BUFFER_TOO_SMALL;
+            }
+            break;
+        }
+
+        case CKA_ALWAYS_AUTHENTICATE:
+            // 	If CK_TRUE, the user has to supply the PIN for each use (sign or decrypt) with the key.
+            if (pTemplate[i].pValue == NULL_PTR) {
+                pTemplate[i].ulValueLen = sizeof(CK_BBOOL);
+                rv = CKR_OK;
+            } else if (pTemplate[i].ulValueLen >=  sizeof(CK_BBOOL)) {
+                pTemplate[i].ulValueLen =  sizeof(CK_BBOOL);
+                *((CK_BBOOL *) pTemplate[i].pValue) = CK_FALSE;
+                rv = CKR_OK;
+            } else {
+                pTemplate[i].ulValueLen = (CK_ULONG) -1;
+                rv = CKR_BUFFER_TOO_SMALL;
+            }
+            break;
+
+        default:
+            pTemplate[i].ulValueLen = (CK_ULONG) -1;
+            rv = CKR_ATTRIBUTE_TYPE_INVALID;
+            break;
+        }
+      // TODO: this function has some complex cases for return vlaue. Make sure to check them.
+      if (rv != CKR_OK) {
+        DBG("Unable to get attribute 0x%lx of object %lu", pTemplate[i].type, hObject);
+        rv_final = rv;
+      }
+    }
+
     DOUT;
-    return CKR_FUNCTION_FAILED;
+    return rv_final;
 }
 
 CK_DEFINE_FUNCTION(CK_RV, C_SetAttributeValue)(
@@ -444,9 +581,24 @@ CK_DEFINE_FUNCTION(CK_RV, C_SetAttributeValue)(
 )
 {
     DIN;
-    DBG("TODO!!!");
+    if (hSession != 0 || session.open_count == 0)
+        return CKR_SESSION_HANDLE_INVALID;
+
+    if (pTemplate == NULL_PTR || ulCount == 0)
+      return CKR_ARGUMENTS_BAD;
+
+    CK_RV rv_final = CKR_OK;
+    for (CK_ULONG i = 0; i < ulCount; i++) {
+        CK_RV rv = CKR_ATTRIBUTE_TYPE_INVALID;
+
+      // TODO: this function has some complex cases for return vlaue. Make sure to check them.
+      if (rv != CKR_OK) {
+        DBG("Unable to set attribute 0x%lx of object %lu", pTemplate[i].type, hObject);
+        rv_final = rv;
+      }
+    }
     DOUT;
-    return CKR_FUNCTION_FAILED;
+    return rv_final;
 }
 
 CK_DEFINE_FUNCTION(CK_RV, C_FindObjectsInit)(
@@ -456,9 +608,13 @@ CK_DEFINE_FUNCTION(CK_RV, C_FindObjectsInit)(
 )
 {
     DIN;
-    DBG("TODO!!!");
+
+    if (hSession != 0 || session.open_count == 0)
+        return CKR_SESSION_HANDLE_INVALID;
+
+    session.find_index = 0;
     DOUT;
-    return CKR_FUNCTION_FAILED;
+    return CKR_OK;
 }
 
 CK_DEFINE_FUNCTION(CK_RV, C_FindObjects)(
@@ -469,9 +625,18 @@ CK_DEFINE_FUNCTION(CK_RV, C_FindObjects)(
 )
 {
     DIN;
-    DBG("TODO!!!");
+    if (hSession != 0 || session.open_count == 0)
+        return CKR_SESSION_HANDLE_INVALID;
+
+    if (ulMaxObjectCount > 0 && session.find_index == 0) {
+        *phObject = 0;
+       *pulObjectCount = 1;
+       session.find_index++;
+    } else {
+       *pulObjectCount = 0;
+    }
     DOUT;
-    return CKR_FUNCTION_FAILED;
+    return CKR_OK;
 }
 
 CK_DEFINE_FUNCTION(CK_RV, C_FindObjectsFinal)(
@@ -479,9 +644,10 @@ CK_DEFINE_FUNCTION(CK_RV, C_FindObjectsFinal)(
 )
 {
     DIN;
-    DBG("TODO!!!");
+    if (hSession != 0 || session.open_count == 0)
+        return CKR_SESSION_HANDLE_INVALID;
     DOUT;
-    return CKR_FUNCTION_FAILED;
+    return CKR_OK;
 }
 
 CK_DEFINE_FUNCTION(CK_RV, C_EncryptInit)(
