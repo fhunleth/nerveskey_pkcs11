@@ -21,3 +21,7 @@ nerveskey_pkcs11.so: $(OBJ)
 clean:
 	$(RM) *.so *.o
 
+format:
+	astyle -n $(SRC)
+
+.PHONY: all clean format
