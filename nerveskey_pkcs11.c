@@ -285,9 +285,9 @@ CK_DEFINE_FUNCTION(CK_RV, C_OpenSession)(
     if (slotID != 0)
         return CKR_SLOT_ID_INVALID;
     if (phSession == NULL_PTR)
-      return CKR_ARGUMENTS_BAD;
+        return CKR_ARGUMENTS_BAD;
     if ((flags & CKF_SERIAL_SESSION) == 0)
-       return CKR_SESSION_PARALLEL_NOT_SUPPORTED;
+        return CKR_SESSION_PARALLEL_NOT_SUPPORTED;
 
     if ((flags & CKF_RW_SESSION))
         return CKR_TOKEN_WRITE_PROTECTED;
@@ -453,7 +453,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetAttributeValue)(
         return CKR_SESSION_HANDLE_INVALID;
 
     if (pTemplate == NULL_PTR || ulCount == 0)
-      return CKR_ARGUMENTS_BAD;
+        return CKR_ARGUMENTS_BAD;
 
     CK_RV rv_final = CKR_OK;
     for (CK_ULONG i = 0; i < ulCount; i++) {
@@ -527,13 +527,13 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetAttributeValue)(
         {
             // TODO: REPLACE WITH PUBLIC KEY
             DBG("FIXME!!! CKA_EC_POINT is returning bogus data!!!")
-            static const CK_BYTE prime256v1[] = "\x06\x08\x2a\x86\x48\xce\x3d\x03\x01\x07";
+            static const CK_BYTE publickey[] = "\x04\x5c\x49\x7f\x64\xb3\x5d\x07\x4d\xd6\x2c\x79\xf0\xfc\x9f\x7d\x57\xb6\xe8\x78\xd0\xaf\xc3\xdb\xb6\xfc\x73\x9c\x14\xe3\x10\xe8\x34\xf5\xd2\xa8\x2d\xad\xce\xac\xec\xda\x30\x83\xb0\x8f\x67\x49\xca\x5c\x32\x9e\xba\x38\x02\x92\xac\x22\x1b\x00\x10\xc0\x4c\x15\xab";
             if (pTemplate[i].pValue == NULL_PTR) {
-                pTemplate[i].ulValueLen = sizeof(prime256v1);
+                pTemplate[i].ulValueLen = sizeof(publickey);
                 rv = CKR_OK;
-            } else if (pTemplate[i].ulValueLen >= sizeof(prime256v1)) {
-                pTemplate[i].ulValueLen = sizeof(prime256v1);
-                memcpy(pTemplate[i].pValue, prime256v1, sizeof(prime256v1));
+            } else if (pTemplate[i].ulValueLen >= sizeof(publickey)) {
+                pTemplate[i].ulValueLen = sizeof(publickey);
+                memcpy(pTemplate[i].pValue, publickey, sizeof(publickey));
                 rv = CKR_OK;
             } else {
                 pTemplate[i].ulValueLen = (CK_ULONG) -1;
@@ -557,16 +557,31 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetAttributeValue)(
             }
             break;
 
+        case CKA_SIGN:
+            // 	CK_TRUE if key supports signatures where the signature is an appendix to the data.
+            if (pTemplate[i].pValue == NULL_PTR) {
+                pTemplate[i].ulValueLen = sizeof(CK_BBOOL);
+                rv = CKR_OK;
+            } else if (pTemplate[i].ulValueLen >=  sizeof(CK_BBOOL)) {
+                pTemplate[i].ulValueLen =  sizeof(CK_BBOOL);
+                *((CK_BBOOL *) pTemplate[i].pValue) = CK_TRUE;
+                rv = CKR_OK;
+            } else {
+                pTemplate[i].ulValueLen = (CK_ULONG) -1;
+                rv = CKR_BUFFER_TOO_SMALL;
+            }
+            break;
+
         default:
             pTemplate[i].ulValueLen = (CK_ULONG) -1;
             rv = CKR_ATTRIBUTE_TYPE_INVALID;
             break;
         }
-      // TODO: this function has some complex cases for return vlaue. Make sure to check them.
-      if (rv != CKR_OK) {
-        DBG("Unable to get attribute 0x%lx of object %lu", pTemplate[i].type, hObject);
-        rv_final = rv;
-      }
+        // TODO: this function has some complex cases for return vlaue. Make sure to check them.
+        if (rv != CKR_OK) {
+            DBG("Unable to get attribute 0x%lx of object %lu", pTemplate[i].type, hObject);
+            rv_final = rv;
+        }
     }
 
     DOUT;
@@ -585,17 +600,17 @@ CK_DEFINE_FUNCTION(CK_RV, C_SetAttributeValue)(
         return CKR_SESSION_HANDLE_INVALID;
 
     if (pTemplate == NULL_PTR || ulCount == 0)
-      return CKR_ARGUMENTS_BAD;
+        return CKR_ARGUMENTS_BAD;
 
     CK_RV rv_final = CKR_OK;
     for (CK_ULONG i = 0; i < ulCount; i++) {
         CK_RV rv = CKR_ATTRIBUTE_TYPE_INVALID;
 
-      // TODO: this function has some complex cases for return vlaue. Make sure to check them.
-      if (rv != CKR_OK) {
-        DBG("Unable to set attribute 0x%lx of object %lu", pTemplate[i].type, hObject);
-        rv_final = rv;
-      }
+        // TODO: this function has some complex cases for return vlaue. Make sure to check them.
+        if (rv != CKR_OK) {
+            DBG("Unable to set attribute 0x%lx of object %lu", pTemplate[i].type, hObject);
+            rv_final = rv;
+        }
     }
     DOUT;
     return rv_final;
@@ -630,10 +645,10 @@ CK_DEFINE_FUNCTION(CK_RV, C_FindObjects)(
 
     if (ulMaxObjectCount > 0 && session.find_index == 0) {
         *phObject = 0;
-       *pulObjectCount = 1;
-       session.find_index++;
+        *pulObjectCount = 1;
+        session.find_index++;
     } else {
-       *pulObjectCount = 0;
+        *pulObjectCount = 0;
     }
     DOUT;
     return CKR_OK;
@@ -821,11 +836,37 @@ CK_DEFINE_FUNCTION(CK_RV, C_SignInit)(
 )
 {
     DIN;
-    DBG("TODO!!!");
+    if (hSession != 0 || session.open_count == 0)
+        return CKR_SESSION_HANDLE_INVALID;
+    if (pMechanism == NULL_PTR)
+        return CKR_ARGUMENTS_BAD;
+
+    DBG("Trying to sign some data with mechanism %lu and key %lu", pMechanism->mechanism, hKey);
+
+    CK_RV rv;
+    switch (pMechanism->mechanism) {
+    case CKM_ECDSA:
+        rv = CKR_OK;
+        break;
+
+    default:
+        rv = CKR_MECHANISM_INVALID;
+        break;
+    }
+
     DOUT;
-    return CKR_FUNCTION_FAILED;
+    return rv;
 }
 
+static void dump_data(CK_BYTE_PTR pData,
+                      CK_ULONG ulDataLen)
+{
+    for (CK_ULONG i = 0; i < ulDataLen; ) {
+        fprintf(stderr, "%02x %02x %02x %02x\r\n", pData[0], pData[1], pData[2], pData[3]);
+        i += 4;
+        pData += 4;
+    }
+}
 CK_DEFINE_FUNCTION(CK_RV, C_Sign)(
     CK_SESSION_HANDLE hSession,
     CK_BYTE_PTR pData,
@@ -835,9 +876,25 @@ CK_DEFINE_FUNCTION(CK_RV, C_Sign)(
 )
 {
     DIN;
-    DBG("TODO!!!");
+    if (hSession != 0 || session.open_count == 0)
+        return CKR_SESSION_HANDLE_INVALID;
+    if (pData == NULL_PTR || pSignature == NULL_PTR || pulSignatureLen == NULL_PTR)
+        return CKR_ARGUMENTS_BAD;
+
+    // P256
+
+    DBG("Load %lu bytes into TempKey", ulDataLen);
+    dump_data(pData, ulDataLen);
+    if (ulDataLen != 32)
+        return CKR_ARGUMENTS_BAD;
+    DBG("Call Sign with Mode<7>=1");
+
+    memset(pData, 0xaa, 64);
+    *pulSignatureLen = 64;
+
     DOUT;
-    return CKR_FUNCTION_FAILED;
+
+    return CKR_OK;
 }
 
 CK_DEFINE_FUNCTION(CK_RV, C_SignUpdate)(
