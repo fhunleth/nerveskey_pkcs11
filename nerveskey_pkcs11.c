@@ -32,7 +32,8 @@
 #include "debug.h"
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
+
+#include "atecc508a.h"
 
 #define CRYTOKI_VERSION { 2, 40 }
 #define NKCS11_VERSION_MAJOR 0
@@ -59,7 +60,7 @@ static CK_TOKEN_INFO slot_0_token_info = {
     .label = "Label",
     .manufacturerID = "NervesKey",
     .model = "Model",
-    .serialNumber = "FILLIN",
+    .serialNumber = "FIXME",
     .flags = CKF_WRITE_PROTECTED | CKF_TOKEN_INITIALIZED,
     .ulMaxSessionCount = 1,
     .ulSessionCount = 0,
@@ -81,6 +82,8 @@ static CK_FUNCTION_LIST function_list;
 struct nerves_key_session {
     CK_ULONG open_count;
     CK_ULONG find_index;
+
+    int fd;
 };
 
 static struct nerves_key_session session;
@@ -99,6 +102,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_Initialize)(
     (void) pInitArgs;
 
     memset(&session, 0, sizeof(session));
+    session.fd = -1;
 
     DOUT;
     return CKR_OK;
@@ -202,9 +206,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_WaitForSlotEvent)(
     CK_VOID_PTR pReserved
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -214,10 +216,8 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetMechanismList)(
     CK_ULONG_PTR pulCount
 )
 {
-    DIN;
-
-    DOUT;
-    return CKR_OK;
+    UNIMPLEMENTED();
+    return CKR_FUNCTION_FAILED;
 }
 
 CK_DEFINE_FUNCTION(CK_RV, C_GetMechanismInfo)(
@@ -226,11 +226,8 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetMechanismInfo)(
     CK_MECHANISM_INFO_PTR pInfo
 )
 {
-    DIN;
-
-
-    DOUT;
-    return CKR_OK;
+    UNIMPLEMENTED();
+    return CKR_FUNCTION_FAILED;
 }
 
 CK_DEFINE_FUNCTION(CK_RV, C_InitToken)(
@@ -240,9 +237,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_InitToken)(
     CK_UTF8CHAR_PTR pLabel
 )
 {
-    DIN;
-    DBG("Token initialization unsupported");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -252,9 +247,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_InitPIN)(
     CK_ULONG ulPinLen
 )
 {
-    DIN;
-    DBG("PIN initialization unsupported");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -266,11 +259,8 @@ CK_DEFINE_FUNCTION(CK_RV, C_SetPIN)(
     CK_ULONG ulNewLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
-
 }
 
 CK_DEFINE_FUNCTION(CK_RV, C_OpenSession)(
@@ -297,6 +287,14 @@ CK_DEFINE_FUNCTION(CK_RV, C_OpenSession)(
     (void) Notify;
 
     phSession = 0;
+
+    if (session.open_count == 0) {
+        session.fd = atecc508a_open("/dev/i2c-1");
+        if (session.fd < 0) {
+            DBG("Error opening I2C bus: %s", "/dev/i2c-1");
+            return CKR_DEVICE_ERROR;
+        }
+    }
     session.open_count++;
 
     DOUT;
@@ -313,6 +311,10 @@ CK_DEFINE_FUNCTION(CK_RV, C_CloseSession)(
         return CKR_SLOT_ID_INVALID;
 
     session.open_count--;
+    if (session.open_count == 0) {
+        atecc508a_close(session.fd);
+        session.fd = -1;
+    }
 
     DOUT;
     return CKR_OK;
@@ -326,7 +328,12 @@ CK_DEFINE_FUNCTION(CK_RV, C_CloseAllSessions)(
     if (slotID != 0)
         return CKR_SLOT_ID_INVALID;
 
-    session.open_count = 0;
+    if (session.open_count > 0) {
+        atecc508a_close(session.fd);
+        session.open_count = 0;
+        session.fd = -1;
+    }
+
     DOUT;
     return CKR_OK;
 }
@@ -336,9 +343,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetSessionInfo)(
     CK_SESSION_INFO_PTR pInfo
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_OK;
 }
 
@@ -348,9 +353,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetOperationState)(
     CK_ULONG_PTR pulOperationStateLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -362,9 +365,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_SetOperationState)(
     CK_OBJECT_HANDLE hAuthenticationKey
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -375,9 +376,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_Login)(
     CK_ULONG ulPinLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -385,9 +384,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_Logout)(
     CK_SESSION_HANDLE hSession
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -398,9 +395,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_CreateObject)(
     CK_OBJECT_HANDLE_PTR phObject
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -412,9 +407,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_CopyObject)(
     CK_OBJECT_HANDLE_PTR phNewObject
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -423,9 +416,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DestroyObject)(
     CK_OBJECT_HANDLE hObject
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -435,9 +426,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetObjectSize)(
     CK_ULONG_PTR pulSize
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -525,16 +514,22 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetAttributeValue)(
         case CKA_EC_POINT:
             // DER-encoding of ANSI X9.62 ECPoint value ''Q''.
         {
-            // TODO: REPLACE WITH PUBLIC KEY
-            DBG("FIXME!!! CKA_EC_POINT is returning bogus data!!!")
-            static const CK_BYTE publickey[] = "\x04\x5c\x49\x7f\x64\xb3\x5d\x07\x4d\xd6\x2c\x79\xf0\xfc\x9f\x7d\x57\xb6\xe8\x78\xd0\xaf\xc3\xdb\xb6\xfc\x73\x9c\x14\xe3\x10\xe8\x34\xf5\xd2\xa8\x2d\xad\xce\xac\xec\xda\x30\x83\xb0\x8f\x67\x49\xca\x5c\x32\x9e\xba\x38\x02\x92\xac\x22\x1b\x00\x10\xc0\x4c\x15\xab";
+            CK_BYTE publickey[65] = {0};
+
             if (pTemplate[i].pValue == NULL_PTR) {
                 pTemplate[i].ulValueLen = sizeof(publickey);
                 rv = CKR_OK;
             } else if (pTemplate[i].ulValueLen >= sizeof(publickey)) {
                 pTemplate[i].ulValueLen = sizeof(publickey);
-                memcpy(pTemplate[i].pValue, publickey, sizeof(publickey));
-                rv = CKR_OK;
+
+                // DER-encoding of the key starts with 0x04
+                publickey[0] = 0x04;
+                if (atecc508a_derive_public_key(session.fd, 0, &publickey[1]) < 0) {
+                    DBG("Error getting public key!");
+                    rv = CKR_DEVICE_ERROR;
+                } else {
+                    rv = CKR_OK;
+                }
             } else {
                 pTemplate[i].ulValueLen = (CK_ULONG) -1;
                 rv = CKR_BUFFER_TOO_SMALL;
@@ -577,7 +572,6 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetAttributeValue)(
             rv = CKR_ATTRIBUTE_TYPE_INVALID;
             break;
         }
-        // TODO: this function has some complex cases for return vlaue. Make sure to check them.
         if (rv != CKR_OK) {
             DBG("Unable to get attribute 0x%lx of object %lu", pTemplate[i].type, hObject);
             rv_final = rv;
@@ -671,9 +665,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_EncryptInit)(
     CK_OBJECT_HANDLE hKey
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -685,9 +677,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_Encrypt)(
     CK_ULONG_PTR pulEncryptedDataLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -699,9 +689,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_EncryptUpdate)(
     CK_ULONG_PTR pulEncryptedPartLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -711,9 +699,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_EncryptFinal)(
     CK_ULONG_PTR pulLastEncryptedPartLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -723,9 +709,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DecryptInit)(
     CK_OBJECT_HANDLE hKey
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -737,9 +721,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_Decrypt)(
     CK_ULONG_PTR pulDataLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -751,9 +733,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DecryptUpdate)(
     CK_ULONG_PTR pulPartLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -763,9 +743,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DecryptFinal)(
     CK_ULONG_PTR pulLastPartLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -774,9 +752,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DigestInit)(
     CK_MECHANISM_PTR pMechanism
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -800,9 +776,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DigestUpdate)(
     CK_ULONG ulPartLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -811,9 +785,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DigestKey)(
     CK_OBJECT_HANDLE hKey
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -823,9 +795,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DigestFinal)(
     CK_ULONG_PTR pulDigestLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -840,8 +810,6 @@ CK_DEFINE_FUNCTION(CK_RV, C_SignInit)(
         return CKR_SESSION_HANDLE_INVALID;
     if (pMechanism == NULL_PTR)
         return CKR_ARGUMENTS_BAD;
-
-    DBG("Trying to sign some data with mechanism %lu and key %lu", pMechanism->mechanism, hKey);
 
     CK_RV rv;
     switch (pMechanism->mechanism) {
@@ -858,15 +826,6 @@ CK_DEFINE_FUNCTION(CK_RV, C_SignInit)(
     return rv;
 }
 
-static void dump_data(CK_BYTE_PTR pData,
-                      CK_ULONG ulDataLen)
-{
-    for (CK_ULONG i = 0; i < ulDataLen; ) {
-        fprintf(stderr, "%02x %02x %02x %02x\r\n", pData[0], pData[1], pData[2], pData[3]);
-        i += 4;
-        pData += 4;
-    }
-}
 CK_DEFINE_FUNCTION(CK_RV, C_Sign)(
     CK_SESSION_HANDLE hSession,
     CK_BYTE_PTR pData,
@@ -878,22 +837,32 @@ CK_DEFINE_FUNCTION(CK_RV, C_Sign)(
     DIN;
     if (hSession != 0 || session.open_count == 0)
         return CKR_SESSION_HANDLE_INVALID;
-    if (pData == NULL_PTR || pSignature == NULL_PTR || pulSignatureLen == NULL_PTR)
+    if (pulSignatureLen == NULL_PTR)
         return CKR_ARGUMENTS_BAD;
 
-    // P256
+    if (pSignature == NULL_PTR) {
+        *pulSignatureLen = 64;
+        return CKR_OK;
+    } else if (*pulSignatureLen < 64) {
+        *pulSignatureLen = 64;
+        return CKR_BUFFER_TOO_SMALL;
+    }
 
-    DBG("Load %lu bytes into TempKey", ulDataLen);
-    dump_data(pData, ulDataLen);
-    if (ulDataLen != 32)
+    if (pData == NULL_PTR)
         return CKR_ARGUMENTS_BAD;
-    DBG("Call Sign with Mode<7>=1");
 
-    memset(pData, 0xaa, 64);
+    if (ulDataLen != 32) {
+        DBG("C_Sign called with unsupported data length: %lu", ulDataLen);
+        return CKR_ARGUMENTS_BAD;
+    }
+
+    if (atecc508a_sign(session.fd, 0, pData, pSignature) < 0) {
+        DBG("Error signing data!");
+        return CKR_DEVICE_ERROR;
+    }
     *pulSignatureLen = 64;
 
     DOUT;
-
     return CKR_OK;
 }
 
@@ -903,9 +872,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_SignUpdate)(
     CK_ULONG ulPartLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -915,9 +882,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_SignFinal)(
     CK_ULONG_PTR pulSignatureLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -927,9 +892,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_SignRecoverInit)(
     CK_OBJECT_HANDLE hKey
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -941,9 +904,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_SignRecover)(
     CK_ULONG_PTR pulSignatureLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -953,9 +914,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_VerifyInit)(
     CK_OBJECT_HANDLE hKey
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -967,9 +926,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_Verify)(
     CK_ULONG ulSignatureLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -979,9 +936,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_VerifyUpdate)(
     CK_ULONG ulPartLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -991,9 +946,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_VerifyFinal)(
     CK_ULONG ulSignatureLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1003,9 +956,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_VerifyRecoverInit)(
     CK_OBJECT_HANDLE hKey
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1017,9 +968,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_VerifyRecover)(
     CK_ULONG_PTR pulDataLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1031,9 +980,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DigestEncryptUpdate)(
     CK_ULONG_PTR pulEncryptedPartLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1045,9 +992,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DecryptDigestUpdate)(
     CK_ULONG_PTR pulPartLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1059,9 +1004,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_SignEncryptUpdate)(
     CK_ULONG_PTR pulEncryptedPartLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1073,9 +1016,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DecryptVerifyUpdate)(
     CK_ULONG_PTR pulPartLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1087,9 +1028,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GenerateKey)(
     CK_OBJECT_HANDLE_PTR phKey
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1104,9 +1043,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GenerateKeyPair)(
     CK_OBJECT_HANDLE_PTR phPrivateKey
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1119,9 +1056,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_WrapKey)(
     CK_ULONG_PTR pulWrappedKeyLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1136,9 +1071,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_UnwrapKey)(
     CK_OBJECT_HANDLE_PTR phKey
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1151,9 +1084,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DeriveKey)(
     CK_OBJECT_HANDLE_PTR phKey
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1165,9 +1096,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_SeedRandom)(
     CK_ULONG ulSeedLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1177,9 +1106,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GenerateRandom)(
     CK_ULONG ulRandomLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1187,9 +1114,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetFunctionStatus)(
     CK_SESSION_HANDLE hSession
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 
@@ -1197,9 +1122,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_CancelFunction)(
     CK_SESSION_HANDLE hSession
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
 

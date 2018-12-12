@@ -34,6 +34,13 @@
 #define YKCS11_DBG 1
 #define YKCS11_DINOUT 1
 
+#define PROGNAME "nerveskey_pkcs11"
+
+#define UNIMPLEMENTED() do { \
+fprintf(stderr, "%s: %s is unimplemented.\r\n", PROGNAME, __func__); \
+} while (0)
+
+
 #define D(x...) do {                                                           \
     fprintf (stderr, "debug: %s:%d (%s): ", __FILE__, __LINE__, __FUNCTION__); \
     fprintf (stderr, x);                                                       \
