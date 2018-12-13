@@ -1,38 +1,62 @@
 # nerveskey_pkcs11
 
+This is a minimal implementation of [PKCS #11](https://en.wikipedia.org/wiki/PKCS_11)
+for interacting with the NervesKey.  The NervesKey is a specific configuration
+of the ATECC508A/ATECC608A chips that holds one private key in slot 0. If you're
+using these chips in a similar configuration, this should work for you as well.
 
-## Installation
+Another option is to look at
+[cryptoauth-openssl-engine](https://github.com/MicrochipTech/cryptoauth-openssl-engine)
+or [cryptoauthlib](https://github.com/MicrochipTech/cryptoauthlib).
+
+## Building
+
+This library is self-contained with no dependencies other that a C compiler.
+
+```sh
+make
+```
+
+## OpenSSL integration
+
+To use this with OpenSSL, you'll need `libpkcs11.so`. This library comes from
+[OpenSC's libp11](https://github.com/OpenSC/libp11) and can be installed on
+Debian systems by running:
 
 ```sh
 sudo apt install opensc-pkcs11
 ```
 
-## Things I don't understand yet
+## Invocation from Erlang and Elixir
 
-How does p11-kit fit in without of this?
+Erlang's `crypto` application provides an API for loading OpenSSL engines. See
+[the Erlang crypto User's Guide](http://erlang.org/doc/apps/crypto/engine_load.html)
+for details on this feature. I use the `dynamic` engine to load `libpkcs11.so`
+which in turn loads this PKCS #11 implementation. Here's and example call in
+Elixir:
 
-```sh
-$ p11-kit list-modules             master*
-p11-kit-trust: p11-kit-trust.so
-    library-description: PKCS#11 Kit Trust Module
-    library-manufacturer: PKCS#11 Kit
-    library-version: 0.23
-    token: System Trust
-        manufacturer: PKCS#11 Kit
-        model: p11-kit-trust
-        serial-number: 1
-        hardware-version: 0.23
-        flags:
-               write-protected
-               token-initialized
-opensc-pkcs11: opensc-pkcs11.so
-    library-description: OpenSC smartcard framework
-    library-manufacturer: OpenSC Project
-    library-version: 0.17
+```elixir
+{:ok, engine} =
+  :crypto.engine_load(
+    "dynamic",
+    [{"SO_PATH", "/usr/lib/engines-1.1/libpkcs11.so"}, {"ID", "pkcs11"}, "LOAD"],
+    [{"MODULE_PATH", "nerveskey_pkcs11.so")}]
+  )
 ```
 
-## Links
+Update the path to `libpkcs11.so` and `nerveskey_pkcs11.so` for your system.
 
-* https://raymii.org/s/articles/Get_Started_With_The_Nitrokey_HSM.html#PKCS#11,_#15_and_OpenSC
-* https://github.com/CardContact/sc-hsm-embedded
-* https://p11-glue.github.io/p11-glue/
+After you load the engine, you'll eventually want to use it. The intended use
+case is for delegate the ECDSA operation to the ATECC508A for use with TLS
+connections. You'll need to obtain the X.509 certificate that corresponds to the
+private key held in the ATECC508A through some mechanism. Then in your SSL
+options, you'll have something like this:
+
+```elixir
+[
+  key: %{algorithm: :ecdsa, engine: engine, key_id: "pkcs11:id=0;type=private"},
+  certfile: "device-cert.pem",
+]
+```
+
+

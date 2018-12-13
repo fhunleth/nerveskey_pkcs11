@@ -29,16 +29,36 @@
  */
 
 #include "pkcs11.h"
-#include "debug.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "atecc508a.h"
 
-#define CRYTOKI_VERSION { 2, 40 }
+#define CRYTOKI_VERSION { CRYPTOKI_VERSION_MAJOR, CRYPTOKI_VERSION_MINOR * 10 + CRYPTOKI_VERSION_REVISION }
 #define NKCS11_VERSION_MAJOR 0
 #define NKCS11_VERSION_MINOR 1
 #define NKCS11_VERSION_PATCH 0
+
+#define PROGNAME "nerveskey_pkcs11"
+
+#define DEBUG
+#ifdef DEBUG
+#define ENTER() do { \
+        fprintf(stderr, "%s: Entered %s().\r\n", PROGNAME, __func__); \
+    } while (0)
+
+#define INFO(fmt, ...) \
+        do { fprintf(stderr, "%s: " fmt "\r\n", PROGNAME, ##__VA_ARGS__); } while (0)
+#else
+#define ENTER()
+#define INFO(fmt, ...)
+#endif
+
+// Always warn on unimplemented functions. Maybe someone will help make this more complete.
+#define UNIMPLEMENTED() do { \
+        fprintf(stderr, "%s: %s is unimplemented.\r\n", PROGNAME, __func__); \
+    } while (0)
 
 static CK_INFO library_info = {
     .cryptokiVersion = CRYTOKI_VERSION,
@@ -57,9 +77,9 @@ static CK_SLOT_INFO slot_0_info = {
 };
 
 static CK_TOKEN_INFO slot_0_token_info = {
-    .label = "Label",
+    .label = "Slot0",
     .manufacturerID = "NervesKey",
-    .model = "Model",
+    .model = "NervesKey",
     .serialNumber = "FIXME",
     .flags = CKF_WRITE_PROTECTED | CKF_TOKEN_INITIALIZED,
     .ulMaxSessionCount = 1,
@@ -88,6 +108,8 @@ struct nerves_key_session {
 
 static struct nerves_key_session session;
 
+#define UNUSED(v) (void) v
+
 // See https://www.cryptsoft.com/pkcs11doc/
 
 // https://www.cryptsoft.com/pkcs11doc/v220/pkcs11__all_8h.html
@@ -98,13 +120,12 @@ CK_DEFINE_FUNCTION(CK_RV, C_Initialize)(
     CK_VOID_PTR pInitArgs
 )
 {
-    DIN;
-    (void) pInitArgs;
+    ENTER();
+    UNUSED(pInitArgs);
 
     memset(&session, 0, sizeof(session));
     session.fd = -1;
 
-    DOUT;
     return CKR_OK;
 }
 
@@ -112,9 +133,8 @@ CK_DEFINE_FUNCTION(CK_RV, C_Finalize)(
     CK_VOID_PTR pReserved
 )
 {
-    DIN;
-    (void) pReserved;
-    DOUT;
+    ENTER();
+    UNUSED(pReserved);
     return CKR_OK;
 }
 
@@ -122,9 +142,8 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetInfo)(
     CK_INFO_PTR pInfo
 )
 {
-    DIN;
+    ENTER();
     *pInfo = library_info;
-    DOUT;
     return CKR_OK;
 }
 
@@ -132,15 +151,13 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetFunctionList)(
     CK_FUNCTION_LIST_PTR_PTR ppFunctionList
 )
 {
-    DIN;
+    ENTER();
 
     if(ppFunctionList == NULL_PTR) {
-        DBG("GetFunctionList called with ppFunctionList = NULL");
+        INFO("GetFunctionList called with ppFunctionList = NULL");
         return CKR_ARGUMENTS_BAD;
     }
     *ppFunctionList = &function_list;
-
-    DOUT;
     return CKR_OK;
 }
 
@@ -152,9 +169,9 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetSlotList)(
     CK_ULONG_PTR pulCount
 )
 {
-    (void) tokenPresent;
+    UNUSED(tokenPresent);
 
-    DIN;
+    ENTER();
 
     if (pSlotList == NULL_PTR) {
         *pulCount = 1;
@@ -164,8 +181,6 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetSlotList)(
         *pulCount = 1;
         *pSlotList = 0; // Slot 0 is the only slot
     }
-
-    DOUT;
     return CKR_OK;
 }
 
@@ -174,14 +189,11 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetSlotInfo)(
     CK_SLOT_INFO_PTR pInfo
 )
 {
-    DIN;
-
+    ENTER();
     if (slotID != 0)
         return CKR_SLOT_ID_INVALID;
 
     *pInfo = slot_0_info;
-
-    DOUT;
     return CKR_OK;
 }
 
@@ -190,13 +202,12 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetTokenInfo)(
     CK_TOKEN_INFO_PTR pInfo
 )
 {
-    DIN;
-
+    UNUSED(slotID);
+    UNUSED(pInfo);
+    ENTER();
     if (slotID != 0)
         return CKR_SLOT_ID_INVALID;
     *pInfo = slot_0_token_info;
-
-    DOUT;
     return CKR_OK;
 }
 
@@ -206,6 +217,9 @@ CK_DEFINE_FUNCTION(CK_RV, C_WaitForSlotEvent)(
     CK_VOID_PTR pReserved
 )
 {
+    UNUSED(flags);
+    UNUSED(pSlot);
+    UNUSED(pReserved);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -216,6 +230,8 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetMechanismList)(
     CK_ULONG_PTR pulCount
 )
 {
+    UNUSED(slotID);
+    UNUSED(pMechanismList);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -226,6 +242,9 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetMechanismInfo)(
     CK_MECHANISM_INFO_PTR pInfo
 )
 {
+    UNUSED(slotID);
+    UNUSED(type);
+    UNUSED(pInfo);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -237,6 +256,9 @@ CK_DEFINE_FUNCTION(CK_RV, C_InitToken)(
     CK_UTF8CHAR_PTR pLabel
 )
 {
+    UNUSED(slotID);
+    UNUSED(pPin);
+    UNUSED(ulPinLen);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -247,6 +269,9 @@ CK_DEFINE_FUNCTION(CK_RV, C_InitPIN)(
     CK_ULONG ulPinLen
 )
 {
+    UNUSED(hSession);
+    UNUSED(pPin);
+    UNUSED(ulPinLen);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -259,6 +284,11 @@ CK_DEFINE_FUNCTION(CK_RV, C_SetPIN)(
     CK_ULONG ulNewLen
 )
 {
+    UNUSED(hSession);
+    UNUSED(pOldPin);
+    UNUSED(ulOldLen);
+    UNUSED(pNewPin);
+    UNUSED(ulNewLen);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -271,7 +301,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_OpenSession)(
     CK_SESSION_HANDLE_PTR phSession
 )
 {
-    DIN;
+    ENTER();
     if (slotID != 0)
         return CKR_SLOT_ID_INVALID;
     if (phSession == NULL_PTR)
@@ -283,21 +313,19 @@ CK_DEFINE_FUNCTION(CK_RV, C_OpenSession)(
         return CKR_TOKEN_WRITE_PROTECTED;
 
     // Unused
-    (void) pApplication;
-    (void) Notify;
+    UNUSED(pApplication);
+    UNUSED(Notify);
 
     phSession = 0;
 
     if (session.open_count == 0) {
         session.fd = atecc508a_open("/dev/i2c-1");
         if (session.fd < 0) {
-            DBG("Error opening I2C bus: %s", "/dev/i2c-1");
+            INFO("Error opening I2C bus: %s", "/dev/i2c-1");
             return CKR_DEVICE_ERROR;
         }
     }
     session.open_count++;
-
-    DOUT;
     return CKR_OK;
 }
 
@@ -305,7 +333,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_CloseSession)(
     CK_SESSION_HANDLE hSession
 )
 {
-    DIN;
+    ENTER();
 
     if (hSession != 0 || session.open_count == 0)
         return CKR_SLOT_ID_INVALID;
@@ -315,8 +343,6 @@ CK_DEFINE_FUNCTION(CK_RV, C_CloseSession)(
         atecc508a_close(session.fd);
         session.fd = -1;
     }
-
-    DOUT;
     return CKR_OK;
 }
 
@@ -324,7 +350,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_CloseAllSessions)(
     CK_SLOT_ID slotID
 )
 {
-    DIN;
+    ENTER();
     if (slotID != 0)
         return CKR_SLOT_ID_INVALID;
 
@@ -333,8 +359,6 @@ CK_DEFINE_FUNCTION(CK_RV, C_CloseAllSessions)(
         session.open_count = 0;
         session.fd = -1;
     }
-
-    DOUT;
     return CKR_OK;
 }
 
@@ -343,8 +367,10 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetSessionInfo)(
     CK_SESSION_INFO_PTR pInfo
 )
 {
+    UNUSED(hSession);
+    UNUSED(pInfo);
     UNIMPLEMENTED();
-    return CKR_OK;
+    return CKR_FUNCTION_FAILED;
 }
 
 CK_DEFINE_FUNCTION(CK_RV, C_GetOperationState)(
@@ -353,6 +379,9 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetOperationState)(
     CK_ULONG_PTR pulOperationStateLen
 )
 {
+    UNUSED(hSession);
+    UNUSED(pOperationState);
+    UNUSED(pulOperationStateLen);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -365,6 +394,11 @@ CK_DEFINE_FUNCTION(CK_RV, C_SetOperationState)(
     CK_OBJECT_HANDLE hAuthenticationKey
 )
 {
+    UNUSED(hSession);
+    UNUSED(pOperationState);
+    UNUSED(ulOperationStateLen);
+    UNUSED(hEncryptionKey);
+    UNUSED(hAuthenticationKey);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -376,6 +410,10 @@ CK_DEFINE_FUNCTION(CK_RV, C_Login)(
     CK_ULONG ulPinLen
 )
 {
+    UNUSED(hSession);
+    UNUSED(userType);
+    UNUSED(pPin);
+    UNUSED(ulPinLen);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -384,6 +422,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_Logout)(
     CK_SESSION_HANDLE hSession
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -395,6 +434,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_CreateObject)(
     CK_OBJECT_HANDLE_PTR phObject
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -407,6 +447,8 @@ CK_DEFINE_FUNCTION(CK_RV, C_CopyObject)(
     CK_OBJECT_HANDLE_PTR phNewObject
 )
 {
+    UNUSED(hSession);
+    UNUSED(hObject);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -416,6 +458,8 @@ CK_DEFINE_FUNCTION(CK_RV, C_DestroyObject)(
     CK_OBJECT_HANDLE hObject
 )
 {
+    UNUSED(hSession);
+    UNUSED(hObject);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -426,6 +470,8 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetObjectSize)(
     CK_ULONG_PTR pulSize
 )
 {
+    UNUSED(hSession);
+    UNUSED(hObject);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -437,7 +483,9 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetAttributeValue)(
     CK_ULONG ulCount
 )
 {
-    DIN;
+    UNUSED(hSession);
+    UNUSED(hObject);
+    ENTER();
     if (hSession != 0 || session.open_count == 0)
         return CKR_SESSION_HANDLE_INVALID;
 
@@ -525,7 +573,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetAttributeValue)(
                 // DER-encoding of the key starts with 0x04
                 publickey[0] = 0x04;
                 if (atecc508a_derive_public_key(session.fd, 0, &publickey[1]) < 0) {
-                    DBG("Error getting public key!");
+                    INFO("Error getting public key!");
                     rv = CKR_DEVICE_ERROR;
                 } else {
                     rv = CKR_OK;
@@ -573,12 +621,10 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetAttributeValue)(
             break;
         }
         if (rv != CKR_OK) {
-            DBG("Unable to get attribute 0x%lx of object %lu", pTemplate[i].type, hObject);
+            INFO("Unable to get attribute 0x%lx of object %lu", pTemplate[i].type, hObject);
             rv_final = rv;
         }
     }
-
-    DOUT;
     return rv_final;
 }
 
@@ -589,7 +635,9 @@ CK_DEFINE_FUNCTION(CK_RV, C_SetAttributeValue)(
     CK_ULONG ulCount
 )
 {
-    DIN;
+    UNUSED(hSession);
+    UNUSED(hObject);
+    ENTER();
     if (hSession != 0 || session.open_count == 0)
         return CKR_SESSION_HANDLE_INVALID;
 
@@ -602,11 +650,10 @@ CK_DEFINE_FUNCTION(CK_RV, C_SetAttributeValue)(
 
         // TODO: this function has some complex cases for return vlaue. Make sure to check them.
         if (rv != CKR_OK) {
-            DBG("Unable to set attribute 0x%lx of object %lu", pTemplate[i].type, hObject);
+            INFO("Unable to set attribute 0x%lx of object %lu", pTemplate[i].type, hObject);
             rv_final = rv;
         }
     }
-    DOUT;
     return rv_final;
 }
 
@@ -616,13 +663,13 @@ CK_DEFINE_FUNCTION(CK_RV, C_FindObjectsInit)(
     CK_ULONG ulCount
 )
 {
-    DIN;
+    UNUSED(hSession);
+    ENTER();
 
     if (hSession != 0 || session.open_count == 0)
         return CKR_SESSION_HANDLE_INVALID;
 
     session.find_index = 0;
-    DOUT;
     return CKR_OK;
 }
 
@@ -633,7 +680,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_FindObjects)(
     CK_ULONG_PTR pulObjectCount
 )
 {
-    DIN;
+    ENTER();
     if (hSession != 0 || session.open_count == 0)
         return CKR_SESSION_HANDLE_INVALID;
 
@@ -644,7 +691,6 @@ CK_DEFINE_FUNCTION(CK_RV, C_FindObjects)(
     } else {
         *pulObjectCount = 0;
     }
-    DOUT;
     return CKR_OK;
 }
 
@@ -652,10 +698,10 @@ CK_DEFINE_FUNCTION(CK_RV, C_FindObjectsFinal)(
     CK_SESSION_HANDLE hSession
 )
 {
-    DIN;
+    UNUSED(hSession);
+    ENTER();
     if (hSession != 0 || session.open_count == 0)
         return CKR_SESSION_HANDLE_INVALID;
-    DOUT;
     return CKR_OK;
 }
 
@@ -665,6 +711,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_EncryptInit)(
     CK_OBJECT_HANDLE hKey
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -677,6 +724,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_Encrypt)(
     CK_ULONG_PTR pulEncryptedDataLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -689,6 +737,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_EncryptUpdate)(
     CK_ULONG_PTR pulEncryptedPartLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -699,6 +748,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_EncryptFinal)(
     CK_ULONG_PTR pulLastEncryptedPartLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -709,6 +759,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DecryptInit)(
     CK_OBJECT_HANDLE hKey
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -721,6 +772,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_Decrypt)(
     CK_ULONG_PTR pulDataLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -733,6 +785,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DecryptUpdate)(
     CK_ULONG_PTR pulPartLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -743,6 +796,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DecryptFinal)(
     CK_ULONG_PTR pulLastPartLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -752,6 +806,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DigestInit)(
     CK_MECHANISM_PTR pMechanism
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -764,9 +819,9 @@ CK_DEFINE_FUNCTION(CK_RV, C_Digest)(
     CK_ULONG_PTR pulDigestLen
 )
 {
-    DIN;
-    DBG("TODO!!!");
-    DOUT;
+    UNUSED(hSession);
+    ENTER();
+    INFO("TODO!!!");
     return CKR_FUNCTION_FAILED;
 }
 
@@ -776,6 +831,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DigestUpdate)(
     CK_ULONG ulPartLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -785,6 +841,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DigestKey)(
     CK_OBJECT_HANDLE hKey
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -795,6 +852,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DigestFinal)(
     CK_ULONG_PTR pulDigestLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -805,7 +863,8 @@ CK_DEFINE_FUNCTION(CK_RV, C_SignInit)(
     CK_OBJECT_HANDLE hKey
 )
 {
-    DIN;
+    UNUSED(hSession);
+    ENTER();
     if (hSession != 0 || session.open_count == 0)
         return CKR_SESSION_HANDLE_INVALID;
     if (pMechanism == NULL_PTR)
@@ -821,8 +880,6 @@ CK_DEFINE_FUNCTION(CK_RV, C_SignInit)(
         rv = CKR_MECHANISM_INVALID;
         break;
     }
-
-    DOUT;
     return rv;
 }
 
@@ -834,7 +891,8 @@ CK_DEFINE_FUNCTION(CK_RV, C_Sign)(
     CK_ULONG_PTR pulSignatureLen
 )
 {
-    DIN;
+    UNUSED(hSession);
+    ENTER();
     if (hSession != 0 || session.open_count == 0)
         return CKR_SESSION_HANDLE_INVALID;
     if (pulSignatureLen == NULL_PTR)
@@ -852,17 +910,15 @@ CK_DEFINE_FUNCTION(CK_RV, C_Sign)(
         return CKR_ARGUMENTS_BAD;
 
     if (ulDataLen != 32) {
-        DBG("C_Sign called with unsupported data length: %lu", ulDataLen);
+        INFO("C_Sign called with unsupported data length: %lu", ulDataLen);
         return CKR_ARGUMENTS_BAD;
     }
 
     if (atecc508a_sign(session.fd, 0, pData, pSignature) < 0) {
-        DBG("Error signing data!");
+        INFO("Error signing data!");
         return CKR_DEVICE_ERROR;
     }
     *pulSignatureLen = 64;
-
-    DOUT;
     return CKR_OK;
 }
 
@@ -882,6 +938,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_SignFinal)(
     CK_ULONG_PTR pulSignatureLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -892,6 +949,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_SignRecoverInit)(
     CK_OBJECT_HANDLE hKey
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -904,6 +962,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_SignRecover)(
     CK_ULONG_PTR pulSignatureLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -914,6 +973,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_VerifyInit)(
     CK_OBJECT_HANDLE hKey
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -926,6 +986,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_Verify)(
     CK_ULONG ulSignatureLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -936,6 +997,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_VerifyUpdate)(
     CK_ULONG ulPartLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -946,6 +1008,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_VerifyFinal)(
     CK_ULONG ulSignatureLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -956,6 +1019,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_VerifyRecoverInit)(
     CK_OBJECT_HANDLE hKey
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -968,6 +1032,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_VerifyRecover)(
     CK_ULONG_PTR pulDataLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -980,6 +1045,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DigestEncryptUpdate)(
     CK_ULONG_PTR pulEncryptedPartLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -992,6 +1058,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DecryptDigestUpdate)(
     CK_ULONG_PTR pulPartLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -1004,6 +1071,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_SignEncryptUpdate)(
     CK_ULONG_PTR pulEncryptedPartLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -1016,6 +1084,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DecryptVerifyUpdate)(
     CK_ULONG_PTR pulPartLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -1028,6 +1097,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GenerateKey)(
     CK_OBJECT_HANDLE_PTR phKey
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -1043,6 +1113,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GenerateKeyPair)(
     CK_OBJECT_HANDLE_PTR phPrivateKey
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -1056,6 +1127,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_WrapKey)(
     CK_ULONG_PTR pulWrappedKeyLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -1071,6 +1143,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_UnwrapKey)(
     CK_OBJECT_HANDLE_PTR phKey
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -1084,6 +1157,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_DeriveKey)(
     CK_OBJECT_HANDLE_PTR phKey
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -1096,6 +1170,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_SeedRandom)(
     CK_ULONG ulSeedLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -1106,6 +1181,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GenerateRandom)(
     CK_ULONG ulRandomLen
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -1114,6 +1190,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetFunctionStatus)(
     CK_SESSION_HANDLE hSession
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }
@@ -1122,6 +1199,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_CancelFunction)(
     CK_SESSION_HANDLE hSession
 )
 {
+    UNUSED(hSession);
     UNIMPLEMENTED();
     return CKR_FUNCTION_FAILED;
 }

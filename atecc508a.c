@@ -19,7 +19,6 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include <err.h>
 
 #include <linux/i2c.h>
 #include <linux/i2c-dev.h>
@@ -29,6 +28,15 @@
 #include <sys/stat.h>
 
 #include "atecc508a.h"
+
+#define DEBUG
+#ifdef DEBUG
+#include <stdio.h>
+#define INFO(fmt, ...) \
+        do { fprintf(stderr, "%s: " fmt "\r\n", "atecc508a", ##__VA_ARGS__); } while (0)
+#else
+#define INFO(fmt, ...)
+#endif
 
 #define ATECC508A_ADDR 0x60
 #define ATECC508A_WAKE_DELAY_US 1500
@@ -323,12 +331,12 @@ int atecc508a_sign(int fd, uint8_t slot, const uint8_t *data, uint8_t *signature
 
     uint8_t response[64 + 3];
     if (i2c_transfer(fd, ATECC508A_ADDR, NULL, 0, response, 4) < 0) {
-        warnx("Didn't receive response to Nonce cmd");
+        INFO("Didn't receive response to Nonce cmd");
         return -1;
     }
 
     if (response[0] != 4 || response[1] != 0) {
-        warnx("Unexpected Nonce response %02x %02x %02x %02x", response[0], response[1], response[2], response[3]);
+        INFO("Unexpected Nonce response %02x %02x %02x %02x", response[0], response[1], response[2], response[3]);
         return -1;
     }
 
@@ -342,7 +350,7 @@ int atecc508a_sign(int fd, uint8_t slot, const uint8_t *data, uint8_t *signature
     atecc508a_crc(&msg[1]);
 
     if (i2c_transfer(fd, ATECC508A_ADDR, msg, msg[1] + 1, NULL, 0) < 0) {
-        warnx("Error signing TempKey");
+        INFO("Error signing TempKey");
         return -1;
     }
 
@@ -350,13 +358,13 @@ int atecc508a_sign(int fd, uint8_t slot, const uint8_t *data, uint8_t *signature
     microsleep(100000);
 
     if (i2c_transfer(fd, ATECC508A_ADDR, NULL, 0, response, 64 + 3) < 0) {
-        warnx("Didn't receive response from sign cmd");
+        INFO("Didn't receive response from sign cmd");
         return -1;
     }
 
     // Check length
     if (response[0] != 64 + 3) {
-        warnx("Sign response not expected: %02x %02x %02x %02x", response[0], response[1], response[2], response[3]);
+        INFO("Sign response not expected: %02x %02x %02x %02x", response[0], response[1], response[2], response[3]);
         return -1;
     }
 
@@ -366,7 +374,7 @@ int atecc508a_sign(int fd, uint8_t slot, const uint8_t *data, uint8_t *signature
     got_crc[1] = response[64 + 2];
     atecc508a_crc(response);
     if (got_crc[0] != response[64 + 1] || got_crc[1] != response[64 + 2]) {
-        warnx("Bad CRC on sign response");
+        INFO("Bad CRC on sign response");
         return -1;
     }
 
